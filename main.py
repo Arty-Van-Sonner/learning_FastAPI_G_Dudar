@@ -1,6 +1,6 @@
 from typing import Annotated, Optional
-from fastapi import Body, Depends, FastAPI, HTTPException, Path
-from pydantic import BaseModel
+from fastapi import Body, Depends, FastAPI, HTTPException, Path, Query
+from pydantic import BaseModel, Field
 
 app = FastAPI()
 
@@ -8,6 +8,16 @@ class User(BaseModel):
     id: int
     name: str
     age: int
+
+class UserCreate(BaseModel):
+    name: Annotated[
+        str,
+        Field(..., title='User name', min_length=2, max_length=64)
+    ]
+    age: Annotated[
+        int,
+        Field(..., title='User age', ge=1, le=120)
+    ]
 
 class Post(BaseModel):
     id: int
@@ -82,11 +92,16 @@ async def items() -> list[Post]:
     return post_objects
 
 @app.get('/items/{post_id}')
-async def items(post_id: int) -> Post:
+async def items(post_id: Annotated[int, Path(..., title='This is post id', ge=1, lt=100)]) -> Post:
     return get_post_by_id(post_id)
 
 @app.get('/search')
-async def search(post_id: Optional[int] = None) -> Post | dict[str, str]:
+async def search(post_id: 
+                 Annotated[
+                     int | None,
+                     Query() 
+                    ]
+                 ) -> Post | dict[str, str]:
     if post_id:
         return get_post_by_id(post_id)
     else:
@@ -107,7 +122,7 @@ def get_author_by_id(author_id) -> dict | None:
         raise HTTPException(status_code=404, detail='User not found')
     
 @app.post('/items/add')
-async def add_item(post: PostCreate = Body()) -> Post:  
+async def add_item(post: Annotated[PostCreate, Body()]) -> Post:  
     author = get_author_by_id(post.author_id)
     new_post = {
         'id': max(map(lambda p: p['id'], posts)) + 1,
@@ -117,6 +132,22 @@ async def add_item(post: PostCreate = Body()) -> Post:
     }
     posts.append(new_post)
     return Post(**new_post)
+
+@app.post('/user/add')
+async def add_user(user: Annotated[
+    UserCreate,
+    Body(..., example={
+        'name': 'Username',
+        'age': 18,
+    })
+]) -> User:  
+    new_user = {
+        'id': max(map(lambda p: p['id'], users)) + 1,
+        'name': user.name,
+        'age': user.age,
+    }
+    users.append(new_user)
+    return User(**new_user)
 
 @app.put('/items/{post_id}/edit')
 async def edit_post(post_id: Annotated[int, Path()], post: PostEdit = Body()):
